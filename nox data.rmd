@@ -1,0 +1,144 @@
+---
+title: "Application on NOx dataset"
+geometry: margin=2cm
+output: pdf_document
+header-includes:
+   - \usepackage{mathpazo}
+   - \usepackage{verbatim}
+editor_options: 
+  chunk_output_type: console
+---
+
+# load
+
+```{r}
+source("jsrr.final.r")
+```
+
+# data import
+
+```{r}
+library(fda.usc)
+data("poblenou")
+y = t(as.matrix(poblenou$nox$data))
+x = seq(0, 1, length = nrow(y))
+```
+
+# ggplot
+## Full data
+
+```{r}
+library(ggplot2)
+x_draw = seq(0, 23, length = nrow(y))
+colnames(y) = NULL
+groups = as.factor(1 : ncol(y))
+data.nox = data.frame(x = x_draw, y = matrix(y, ncol = 1), grp = rep(groups, each = nrow(y)))
+g = ggplot(data = data.nox, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.3) +
+   theme_bw() +
+   scale_color_viridis_d() +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank()) +
+   coord_cartesian(xlim = c(0, 23),
+                   ylim = c(10, 390))
+g
+```
+
+## Split
+
+```{r}
+library(ggplot2)
+non_working = (poblenou$df[, 2] %in% c("6", "7") | poblenou$df[, 3] == 1)
+y_nw = y[, non_working]
+y_w = y[, !non_working]
+
+colnames(y_w) = NULL
+groups = 1 : ncol(y_w)
+data.working = data.frame(x = x_draw, y = matrix(y_w, ncol = 1), grp = rep(groups, each = nrow(y_w)))
+g1 = ggplot(data = data.working, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), size = 0.3) +
+   theme_bw() +
+   scale_color_gradient(low = "yellow4", high = "red4") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(10, 390))
+groups = 1 : ncol(y_nw)
+data.nonworking = data.frame(x = x_draw, y = matrix(y_nw, ncol = 1), grp = rep(groups, each = nrow(y_nw)))
+g2 = ggplot(data = data.nonworking, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), size = 0.3) +
+   theme_bw() +
+   scale_color_gradient(low = "green3", high = "blue4") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(10, 390))
+
+par(mfrow = c(1, 2))
+g1; g2
+```
+
+# fit
+
+```{r}
+# wavelet basis
+order = 2; max.resolution = 3
+phi = wavelet(x, order, max.resolution)
+fit = jsrr(y, phi, wavelet = T)
+```
+
+# predict using new values
+
+```{r}
+seq_length = 300
+x_seq = seq(0, 1, length = seq_length)
+# wavelet
+phi_seq = wavelet(x_seq, order, max.resolution)
+colors = topo.colors(ncol(y))
+
+fv = predict.jsrr(y, phi_seq, fit$best)
+fv_w = fv[, !non_working]
+fv_nw = fv[, non_working]
+```
+
+# ggplot
+## Split
+
+```{r}
+library(ggplot2)
+seq_length = 300
+x_seq = seq(0, 23, length = seq_length)
+colnames(fv_w) = NULL
+groups = 1 : ncol(fv_w)
+data.working = data.frame(x = x_seq, y = matrix(fv_w, ncol = 1), grp = rep(groups, each = nrow(fv_w)))
+g1 = ggplot(data = data.working, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.3) +
+   theme_bw() +
+   scale_color_gradient(low = "yellow4", high = "red4") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 390))
+groups = 1 : ncol(fv_nw)
+data.nonworking = data.frame(x = x_seq, y = matrix(fv_nw, ncol = 1), grp = rep(groups, each = nrow(fv_nw)))
+g2 = ggplot(data = data.nonworking, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.3) +
+   theme_bw() +
+   scale_color_gradient(low = "green3", high = "blue4") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 390))
+
+par(mfrow = c(1, 2))
+g1; g2
+```

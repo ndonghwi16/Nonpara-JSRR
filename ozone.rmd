@@ -1,0 +1,179 @@
+---
+title: "Application on Ozone dataset"
+geometry: margin=2cm
+output: pdf_document
+header-includes:
+   - \usepackage{mathpazo}
+   - \usepackage{verbatim}
+editor_options: 
+  chunk_output_type: console
+---
+
+# load
+
+```{r}
+source("jsrr.final.r")
+```
+
+# import data
+
+```{r}
+library(tidyr)
+data_final = read.csv("data-ozone.csv")
+data_to_pivot = data_final[, c("Date.Local", "Time.Local", "Sample.Measurement")]
+ozone_final = pivot_wider(data_to_pivot, names_from = Date.Local, values_from = Sample.Measurement)
+
+y = ozone_final[, -1]
+x = seq(0, 1, length = 24)
+x_plot = seq(0, 23)
+```
+
+# ggplot
+## Full data
+
+```{r}
+library(ggplot2)
+y = as.matrix(y)
+colnames(y) = NULL
+groups = as.factor(1 : ncol(y))
+data.ozone = data.frame(x = x_plot, y = matrix(y, ncol = 1), grp = rep(groups, each = nrow(y)))
+g = ggplot(data = data.ozone, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.1) +
+   theme_bw() +
+   scale_color_viridis_d() +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 0.1))
+g
+```
+
+# by season
+
+```{r}
+data_dates = data_to_pivot$Date.Local
+dates_season1 = ("2022-04-15" >= data_dates) | ("2022-10-15" <= data_dates)
+
+data_to_pivot_season1 = data_to_pivot[dates_season1, ]
+data_to_pivot_season2 = data_to_pivot[!dates_season1, ]
+
+ozone_final_season1 = pivot_wider(data_to_pivot_season1, names_from = Date.Local, values_from = Sample.Measurement)
+y_season1 = ozone_final_season1[, -1]
+
+ozone_final_season2 = pivot_wider(data_to_pivot_season2, names_from = Date.Local, values_from = Sample.Measurement)
+y_season2 = ozone_final_season2[, -1]
+
+y_season1 = as.matrix(y_season1)
+colnames(y_season1) = NULL
+groups = 1 : ncol(y_season1)
+data.ozone = data.frame(x = x_plot, y = matrix(y_season1, ncol = 1), grp = rep(groups, each = nrow(y_season1)))
+g = ggplot(data = data.ozone, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.1) +
+   theme_bw() +
+   scale_color_gradient(low = "navy", high = "skyblue") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 0.1))
+g
+
+y_season2 = as.matrix(y_season2)
+colnames(y_season2) = NULL
+groups = 1 : ncol(y_season2)
+data.ozone = data.frame(x = x_plot, y = matrix(y_season2, ncol = 1), grp = rep(groups, each = nrow(y_season2)))
+g = ggplot(data = data.ozone, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.1) +
+   theme_bw() +
+   scale_color_gradient(low = "darkred", high = "gold") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 0.1))
+g
+```
+
+# fit
+
+```{r}
+library(fda)
+dimension = 23
+fbasis = create.fourier.basis(range(x), nbasis = dimension)
+phi = eval.basis(x, basisobj = fbasis)
+
+fit = jsrr(y, phi)
+```
+
+# plot
+
+```{r}
+seq_length = 300
+x_seq = seq(0, 1, length = seq_length)
+fbasis = create.fourier.basis(range(x_seq), nbasis = dimension)
+phi_seq = eval.basis(x_seq, basisobj = fbasis)
+
+fv = predict.jsrr(y, phi_seq, fit$best)
+
+library(ggplot2)
+seq_length = 300
+x_seq = seq(0, 23, length = seq_length)
+groups = 1 : ncol(fv)
+data.ozone_fit = data.frame(x = x_seq, y = matrix(fv, ncol = 1), grp = rep(groups, each = nrow(fv)))
+g1 = ggplot(data = data.ozone_fit, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.1) +
+   theme_bw() +
+   scale_color_viridis_c() +
+   theme(legend.position = "right",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 0.1))
+
+g1
+```
+
+# fit plot
+## by season
+
+```{r}
+dates_unique = unique(data_dates)
+dates_unique_season1 = (dates_unique <= "2022-04-15") | (dates_unique >= "2022-10-15")
+
+# season 1
+groups = 1 : sum(dates_unique_season1)
+data.ozone_fit = data.frame(x = x_seq, y = matrix(fv[, dates_unique_season1], ncol = 1), grp = rep(groups, each = nrow(fv)))
+g1 = ggplot(data = data.ozone_fit, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.1) +
+   theme_bw() +
+   scale_color_gradient(low = "navy", high = "skyblue") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 0.1))
+
+g1
+
+# season 2
+groups = 1 : sum(!dates_unique_season1)
+data.ozone_fit = data.frame(x = x_seq, y = matrix(fv[, !dates_unique_season1], ncol = 1), grp = rep(groups, each = nrow(fv)))
+g2 = ggplot(data = data.ozone_fit, aes(x = x)) +
+   geom_line(aes(y = y, group = grp, col = grp), linewidth = 0.1) +
+   theme_bw() +
+   scale_color_gradient(low = "darkred", high = "gold") +
+   theme(legend.position = "none",
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         axis.text = element_text(size = 20)) +
+   coord_cartesian(xlim = c(0.8, 22.3),
+                   ylim = c(0, 0.1))
+
+g2
+```
